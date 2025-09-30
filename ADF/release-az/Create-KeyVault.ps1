@@ -43,9 +43,30 @@ if (! (Get-AzKeyVault -Name $KVName -EA SilentlyContinue))
 {
     try
     {
-        New-AzKeyVault -Name $KVName -ResourceGroupName $RGName -Location $Location `
-            -EnabledForDeployment -EnabledForTemplateDeployment -EnablePurgeProtection:$EnablePurgeProtection `
-            -EnableRbacAuthorization -Sku Standard -ErrorAction Stop
+        # Build params and add -EnableRbacAuthorization only if supported by current Az.KeyVault module
+        $usingRbacMode = $false
+        $kvCommand = Get-Command -Name New-AzKeyVault -ErrorAction SilentlyContinue
+        if ($kvCommand -and $kvCommand.Parameters.ContainsKey('EnableRbacAuthorization'))
+        {
+            $usingRbacMode = $true
+        }
+
+        $kvParams = @{
+            Name                         = $KVName
+            ResourceGroupName            = $RGName
+            Location                     = $Location
+            EnabledForDeployment         = $true
+            EnabledForTemplateDeployment = $true
+            EnablePurgeProtection        = [bool]$EnablePurgeProtection
+            Sku                          = 'Standard'
+            ErrorAction                  = 'Stop'
+        }
+        if ($usingRbacMode)
+        {
+            $kvParams['EnableRbacAuthorization'] = $true
+        }
+
+        New-AzKeyVault @kvParams
     }
     catch
     {
@@ -54,16 +75,40 @@ if (! (Get-AzKeyVault -Name $KVName -EA SilentlyContinue))
     }
 }
 
-# Primary KV RBAC
+# Primary KV RBAC or Access Policy (fallback when RBAC mode isn't available)
 Write-Verbose -Message "Primary KV Name:`t $KVName RBAC for KV Contributor" -Verbose
 if (Get-AzKeyVault -Name $KVName -EA SilentlyContinue)
 {
     try
     {
         $CurrentUserId = Get-AzContext | ForEach-Object account | ForEach-Object Id
-        if (! (Get-AzRoleAssignment -ResourceGroupName $RGName -SignInName $CurrentUserId -RoleDefinitionName $RoleName))
+
+        # Determine if the created/existing vault is in RBAC mode
+        $kv = Get-AzKeyVault -Name $KVName -EA SilentlyContinue
+        $usingRbacMode = $false
+        if ($kv)
         {
-            New-AzRoleAssignment -ResourceGroupName $RGName -SignInName $CurrentUserId -RoleDefinitionName $RoleName -Verbose
+            $member = $kv | Get-Member -Name EnableRbacAuthorization -ErrorAction SilentlyContinue
+            if ($member)
+            {
+                $usingRbacMode = [bool]$kv.EnableRbacAuthorization
+            }
+        }
+
+        if ($usingRbacMode)
+        {
+            if (! (Get-AzRoleAssignment -ResourceGroupName $RGName -SignInName $CurrentUserId -RoleDefinitionName $RoleName))
+            {
+                New-AzRoleAssignment -ResourceGroupName $RGName -SignInName $CurrentUserId -RoleDefinitionName $RoleName -Verbose
+            }
+        }
+        else
+        {
+            # Fallback for environments without RBAC-enabled Key Vaults: grant access policy to current user
+            Set-AzKeyVaultAccessPolicy -VaultName $KVName -UserPrincipalName $CurrentUserId `
+                -PermissionsToSecrets @('get','list','set','delete','backup','restore','recover') `
+                -PermissionsToCertificates @('get','list','import','delete') `
+                -PermissionsToKeys @('get','list','create','delete') -Verbose
         }
     }
     catch
