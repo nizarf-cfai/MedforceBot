@@ -125,7 +125,7 @@
               {
                 "name": "MEDIA_CONTROL_PLANE",
                 "properties": {
-                  "protocol": "TCP",
+                  "protocol": "UDP",
                   "sourcePortRange": "*",
                   "destinationPortRange": "8445",
                   "sourceAddressPrefix": "AzureCloud",
@@ -215,7 +215,7 @@
                 "enableFloatingIP": false,
                 "backendPort": 8445,
                 "idleTimeoutInMinutes": 4,
-                "protocol": "Tcp",
+                "protocol": "Udp",
                 "LBFEName": "BotVmss01"
               },
               {
