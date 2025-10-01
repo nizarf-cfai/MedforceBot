@@ -23,7 +23,7 @@ on:
 
 env:
   OrgName: MDF
-  Location: ukwest
+  Location: uksouth
 
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:

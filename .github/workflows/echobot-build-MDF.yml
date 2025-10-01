@@ -24,7 +24,7 @@ env:
   BuildName:   0.1.${{ github.run_number }}
   Environment: D1
   OrgName:     MDF
-  Location:    ukwest
+  Location:    uksouth
 
 jobs:
   build:
